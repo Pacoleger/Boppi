@@ -87,7 +87,7 @@
 
 <script>
   // Hier deinen kostenlosen Access Key von web3forms.com eintragen (siehe Anleitung)
-  const ACCESS_KEY = "DEIN_WEB3FORMS_ACCESS_KEY";
+  const ACCESS_KEY = "pacokamegne@gmail.com";
 
   const fragen = [
     ["Ich ___ Anna.", ["sind", "bin", "bist"], 1],
@@ -246,36 +246,47 @@
     window.scrollTo(0, 0);
   });
 
-  async function senden(punkte, stufe, zeilen) {
+  async function senden(punkte, stufe, antworten, fehler, proStufe) {
     const level = stufe[1] === "lvl4" ? T.de.lvl4 : stufe[1];
+    const daten = {
+      access_key: ACCESS_KEY,
+      subject: "Einstufungstest: " + vorname + " – " + level + " (" + punkte + "/12, " + fehler.length + " Fehler)",
+      from_name: "Einstufungstest Webseite",
+      Vorname: vorname,
+      Punkte: punkte + " von 12",
+      Empfohlenes_Niveau: level,
+      Fehler_pro_Niveau: Object.keys(proStufe).map(k => k + ": " + proStufe[k] + " von 3").join("  |  "),
+      Sprache_der_Seite: L
+    };
+    if (fehler.length === 0) daten.Fehler = "Keine Fehler";
+    fehler.forEach((f, i) => { daten["Fehler_" + (i + 1)] = f; });
+    Object.assign(daten, antworten);
     const r = await fetch("https://api.web3forms.com/submit", {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify({
-        access_key: ACCESS_KEY,
-        subject: "Einstufungstest: " + vorname + " – " + level + " (" + punkte + "/12)",
-        from_name: "Einstufungstest Webseite",
-        Vorname: vorname,
-        Punkte: punkte + " von 12",
-        Empfohlenes_Niveau: level,
-        Sprache_der_Seite: L,
-        Antworten: zeilen.join("\n")
-      })
+      body: JSON.stringify(daten)
     });
     const j = await r.json();
+    if (j.success !== true) console.error("Web3Forms:", j.message);
     return j.success === true;
   }
 
   $("test-form").addEventListener("submit", async e => {
     e.preventDefault();
     let punkte = 0; missing = 0;
-    const zeilen = [];
+    const niveaus = ["A1", "A1", "A1", "A2", "A2", "A2", "B1", "B1", "B1", "B2", "B2", "B2"];
+    const antworten = {}, fehler = [], proStufe = { A1: 0, A2: 0, B1: 0, B2: 0 };
     fragen.forEach((f, i) => {
       const g = document.querySelector('input[name="f' + i + '"]:checked');
       if (!g) { missing++; return; }
       const ok = Number(g.value) === f[2];
+      const nr = String(i + 1).padStart(2, "0");
       if (ok) punkte++;
-      zeilen.push((i + 1) + ". " + f[0] + " → " + f[1][g.value] + (ok ? " (richtig)" : " (falsch, richtig: " + f[1][f[2]] + ")"));
+      else {
+        proStufe[niveaus[i]]++;
+        fehler.push("Frage " + (i + 1) + " (" + niveaus[i] + "): " + f[0] + "  gewählt: " + f[1][g.value] + "  richtig: " + f[1][f[2]]);
+      }
+      antworten["Frage_" + nr + "_" + niveaus[i]] = f[0] + "  →  " + f[1][g.value] + (ok ? "  ✔ richtig" : "  ✘ FALSCH (richtig: " + f[1][f[2]] + ")");
     });
     const fe = $("fehler");
     if (missing > 0) {
@@ -289,7 +300,7 @@
     $("testbereich").hidden = true;
     render();
     window.scrollTo(0, 0);
-    try { state.status = (await senden(punkte, stufe, zeilen)) ? "sent" : "failed"; }
+    try { state.status = (await senden(punkte, stufe, antworten, fehler, proStufe)) ? "sent" : "failed"; }
     catch (err) { state.status = "failed"; }
     render();
   });
